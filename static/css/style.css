@@ -1,0 +1,55 @@
+/* Progress bar styles */
+.progress-thin {
+    height: 4px !important;
+}
+
+/* Match table styles */
+.match-row {
+    transition: background-color 0.2s ease;
+}
+
+.match-row:hover {
+    background-color: rgba(0, 0, 0, 0.03);
+}
+
+/* Badge styles */
+.badge-outline {
+    background-color: transparent;
+    border: 1px solid currentColor;
+}
+
+/* Odds badges */
+.odds-badge {
+    min-width: 60px;
+    display: inline-block;
+}
+
+/* Team flags */
+.team-flag {
+    width: 20px;
+    text-align: center;
+    display: inline-block;
+}
+
+/* Responsive table */
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.9rem;
+    }
+    
+    .table th, 
+    .table td {
+        padding: 0.5rem;
+    }
+}
+
+/* Confidence progress bar */
+.confidence-progress {
+    height: 4px;
+    margin-top: 0.25rem;
+}
+
+/* Match time styling */
+.match-time {
+    white-space: nowrap;
+}

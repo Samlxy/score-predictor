@@ -1,35 +1,94 @@
 {% extends "base.html" %}
 
-{% block content %}
-<div class="form-date-range">
-    <form method="POST" class="row g-3">
-        <div class="col-md-4">
-            <label for="start_date" class="form-label">Start Date</label>
-            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}" required>
-        </div>
-        <div class="col-md-4">
-            <label for="end_date" class="form-label">End Date</label>
-            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}" required>
-        </div>
-        <div class="col-md-4 d-flex align-items-end">
-            <button type="submit" class="btn btn-primary w-100">
-                <i class="bi bi-search"></i> Find Matches
-            </button>
-        </div>
-    </form>
-</div>
+{% block head %}
+{{ super() }}
+<style>
+    /* Loading Spinner Styles */
+    #loadingSpinner {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .spinner-border {
+        width: 3rem;
+        height: 3rem;
+    }
+    
+    .blur-content {
+        filter: blur(3px);
+        pointer-events: none;
+    }
+</style>
+{% endblock %}
 
-{% if matches %}
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Match Predictions ({{ matches|length }} matches found)</span>
-        <div>
-            <span class="badge bg-success me-1">High Confidence</span>
-            <span class="badge bg-warning me-1">Medium Confidence</span>
-            <span class="badge bg-danger">Low Confidence</span>
+{% block content %}
+<!-- Loading Spinner -->
+<div id="loadingSpinner">
+    <div class="spinner-border text-light" role="status">
+        <span class="visually-hidden">Loading...</span>
+    </div>
+</div>
+<div class="container mt-4">
+    <h1 class="mb-4">Soccer Match Predictor</h1>
+    
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+    
+    <!-- Date Range Picker -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Match Search</h5>
+        </div>
+        <div class="card-body">
+            <form method="POST" class="row g-3">
+                <div class="col-md-3">
+                    <label for="start_date" class="form-label">Start Date</label>
+                    <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}" required>
+                </div>
+                <div class="col-md-3">
+                    <label for="end_date" class="form-label">End Date</label>
+                    <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}" required>
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check form-switch mt-4 pt-2">
+                        <input class="form-check-input" type="checkbox" id="use_real_data" name="use_real_data" value="true" {% if use_real_data %}checked{% endif %}>
+                        <label class="form-check-label" for="use_real_data">Use Real Data (Bet9ja)</label>
+                        <small class="form-text text-muted d-block">When enabled, fetches live data from Bet9ja</small>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search me-1"></i> Get Predictions
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
-    <div class="card-body p-0">
+
+    <!-- Results Table -->
+    {% if matches %}
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Match Predictions (Over 1.5 Goals)</h5>
+            <span class="badge bg-secondary">{{ matches|length }} Matches</span>
+        </div>
         <div class="table-responsive">
             <table class="table table-hover mb-0">
                 <thead class="table-light">
@@ -38,44 +97,85 @@
                         <th>Match</th>
                         <th>League</th>
                         <th>Date & Time</th>
-                        <th>Over 1.5 Odds</th>
-                        <th>Prediction</th>
-                        <th>Confidence</th>
+                        <th class="text-center">Over 1.5</th>
+                        <th class="text-center">Under 1.5</th>
+                        <th class="text-center">Confidence</th>
+                        <th class="text-center">Source</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for match in matches %}
-                    {% set confidence = match.prediction_confidence if 'prediction_confidence' in match else match.prediction * 100 %}
-                    <tr class="match-row {% if confidence >= 75 %}confidence-high{% elif confidence >= 50 %}confidence-medium{% else %}confidence-low{% endif %}">
-                        <td>{{ loop.index }}</td>
-                        <td>
-                            <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
+                    <tr>
+                        <td class="align-middle">{{ loop.index }}</td>
+                        <td class="align-middle">
+                            <div class="d-flex flex-column">
+                                <div class="d-flex align-items-center">
+                                    <span class="team-flag me-2">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+                                    <strong>{{ match.home_team }}</strong>
+                                </div>
+                                <div class="d-flex align-items-center">
+                                    <span class="team-flag me-2">🏴󠁧󠁢󠁥󠁮󠁧󠁿</span>
+                                    <strong>{{ match.away_team }}</strong>
+                                </div>
+                            </div>
                         </td>
-                        <td>{{ match.league }}</td>
-                        <td>{{ match.match_date }}</td>
-                        <td>{{ "%.2f"|format(match.over_15_odds) if match.over_15_odds else 'N/A' }}</td>
-                        <td>
-                            {% if match.prediction >= 0.7 %}
-                                <span class="text-success">
-                                    <i class="bi bi-check-circle-fill"></i> Over 1.5
-                                </span>
-                            {% elif match.prediction >= 0.4 %}
-                                <span class="text-warning">
-                                    <i class="bi bi-dash-circle-fill"></i> Maybe Over 1.5
-                                </span>
+                        <td class="align-middle">
+                            <span class="badge bg-light text-dark">{{ match.league }}</span>
+                        </td>
+                        <td class="align-middle">
+                            {% set match_time = match.match_time if 'match_time' in match else match.match_date %}
+                            {{ match_time }}
+                        </td>
+                        <td class="text-center align-middle">
+                            {% if match.over_15_odds %}
+                                <span class="badge bg-success bg-opacity-25 text-success">{{ "%.2f"|format(match.over_15_odds) }}</span>
                             {% else %}
-                                <span class="text-danger">
-                                    <i class="bi bi-x-circle-fill"></i> Under 1.5
-                                </span>
+                                <span class="badge bg-secondary bg-opacity-10 text-muted">N/A</span>
                             {% endif %}
                         </td>
-                        <td>
-                            <span class="confidence-badge 
-                                {% if confidence >= 75 %}bg-success
-                                {% elif confidence >= 50 %}bg-warning
-                                {% else %}bg-danger{% endif %}">
-                                {{ "%.1f"|format(confidence) }}%
-                            </span>
+                        <td class="text-center align-middle">
+                            {% if match.under_15_odds %}
+                                <span class="badge bg-danger bg-opacity-25 text-danger">{{ "%.2f"|format(match.under_15_odds) }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary bg-opacity-10 text-muted">N/A</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center align-middle">
+                            {% set confidence = (match.prediction * 100)|int %}
+                            {% if confidence >= 70 %}
+                                {% set badge_class = 'bg-success bg-opacity-10 text-success' %}
+                                {% set icon = 'bi-check-circle-fill' %}
+                                {% set progress_class = 'bg-success' %}
+                            {% elif confidence >= 50 %}
+                                {% set badge_class = 'bg-warning bg-opacity-10 text-warning' %}
+                                {% set icon = 'bi-exclamation-circle-fill' %}
+                                {% set progress_class = 'bg-warning' %}
+                            {% else %}
+                                {% set badge_class = 'bg-danger bg-opacity-10 text-danger' %}
+                                {% set icon = 'bi-x-circle-fill' %}
+                                {% set progress_class = 'bg-danger' %}
+                            {% endif %}
+                            {% set confidence_value = confidence|default(0)|float|round(1) %}
+                            <div class="d-flex align-items-center justify-content-center">
+                                <i class="bi {{ icon }} me-1"></i>
+                                <span class="fw-bold">{{ "%0.1f"|format(confidence_value) }}%</span>
+                            </div>
+                            <div class="progress confidence-progress mt-1">
+                                <div class="progress-bar {{ progress_class }}" 
+                                     role="progressbar" 
+                                     style="width: {{ confidence_value|int }}%" 
+                                     aria-valuenow="{{ confidence_value|int }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                        </td>
+                        <td class="text-center align-middle">
+                            {% if match.source == 'bet9ja' %}
+                                <span class="badge bg-primary">Bet9ja</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Sample</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -96,7 +196,45 @@
 {% endblock %}
 
 {% block scripts %}
+{{ super() }}
 <script>
+    // Show loading spinner when form is submitted
+    document.addEventListener('DOMContentLoaded', function() {
+        const form = document.querySelector('form');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const content = document.querySelector('.container');
+        
+        // Show spinner on form submission
+        if (form) {
+            form.addEventListener('submit', function() {
+                loadingSpinner.style.display = 'flex';
+                if (content) content.classList.add('blur-content');
+            });
+        }
+        
+        // Hide spinner when page is fully loaded
+        window.addEventListener('load', function() {
+            loadingSpinner.style.display = 'none';
+            if (content) content.classList.remove('blur-content');
+        });
+    });
+    
+    // Function to manually show/hide spinner
+    function showLoading(show) {
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const content = document.querySelector('.container');
+        
+        if (loadingSpinner) {
+            loadingSpinner.style.display = show ? 'flex' : 'none';
+        }
+        if (content) {
+            show ? content.classList.add('blur-content') : content.classList.remove('blur-content');
+        }
+    }
+    
+    // Make the function available globally
+    window.showLoading = showLoading;
+    
     // Set minimum end date to be same as start date
     document.getElementById('start_date').addEventListener('change', function() {
         document.getElementById('end_date').min = this.value;
