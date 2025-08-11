@@ -1,20 +1,139 @@
-import requests
-from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-import json
+import os
 import random
-from models import Match, db
+import logging
+import requests
+from datetime import datetime, timedelta
+from dateutil import parser
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# API Configuration
+API_KEY = os.getenv('API_FOOTBALL_KEY')
+API_HOST = os.getenv('API_FOOTBALL_HOST', 'api-football-v1.p.rapidapi.com')
+BASE_URL = 'https://api-football-v1.p.rapidapi.com/v3/'
+
+# Headers for API requests
+HEADERS = {
+    'x-rapidapi-key': API_KEY,
+    'x-rapidapi-host': API_HOST
+}
+
+def make_api_request(endpoint, params=None):
+    """Helper function to make API requests with error handling"""
+    if not API_KEY:
+        logger.error("API key not found. Please set API_FOOTBALL_KEY in your .env file")
+        return None
+        
+    try:
+        response = requests.get(
+            f"{BASE_URL}{endpoint}",
+            headers=HEADERS,
+            params=params or {}
+        )
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        return None
 
 def fetch_matches(start_date, end_date):
     """
-    Fetch matches from betting sites within the specified date range.
-    This is a placeholder that simulates fetching data.
-    In a real implementation, this would scrape or use APIs from bet9ja.com or sportybet.com
-    """
-    # In a real implementation, this would fetch real data
-    # For now, we'll return sample data
+    Fetch football matches from API-Football within the specified date range.
     
-    # Generate sample matches for the date range
+    Args:
+        start_date (datetime): Start date for matches
+        end_date (datetime): End date for matches
+        
+    Returns:
+        list: List of match dictionaries with team, league, and odds information
+    """
+    if not API_KEY:
+        logger.error("API key not configured. Using sample data instead.")
+        return get_sample_matches(start_date, end_date)
+    
+    try:
+        # Convert dates to strings in YYYY-MM-DD format
+        from_date = start_date.strftime('%Y-%m-%d')
+        to_date = end_date.strftime('%Y-%m-%d')
+        
+        # Get fixtures (matches) for the date range
+        params = {
+            'from': from_date,
+            'to': to_date,
+            'status': 'NS',  # Not started
+            'timezone': 'Europe/London'
+        }
+        
+        fixtures_data = make_api_request('fixtures', params)
+        if not fixtures_data or 'response' not in fixtures_data:
+            logger.error("No fixtures data received from API")
+            return get_sample_matches(start_date, end_date)
+        
+        matches = []
+        for fixture in fixtures_data['response']:
+            try:
+                # Get odds for this fixture if available
+                odds = get_match_odds(fixture['fixture']['id'])
+                
+                match = {
+                    'home_team': fixture['teams']['home']['name'],
+                    'away_team': fixture['teams']['away']['name'],
+                    'league': fixture['league']['name'],
+                    'match_date': parser.parse(fixture['fixture']['date']).strftime('%Y-%m-%d %H:%M'),
+                    'over_15_odds': odds.get('over_15', None),
+                    'under_15_odds': odds.get('under_15', None),
+                    'prediction_confidence': 0  # Will be calculated by the predictor
+                }
+                matches.append(match)
+                
+            except Exception as e:
+                logger.error(f"Error processing fixture {fixture.get('fixture', {}).get('id')}: {e}")
+                continue
+        
+        return matches
+        
+    except Exception as e:
+        logger.error(f"Error fetching matches: {e}")
+        return get_sample_matches(start_date, end_date)
+
+def get_match_odds(fixture_id):
+    """Get odds for a specific fixture"""
+    params = {'fixture': fixture_id}
+    odds_data = make_api_request('odds', params)
+    
+    if not odds_data or 'response' not in odds_data or not odds_data['response']:
+        return {'over_15': None, 'under_15': None}
+    
+    # Try to find over/under 1.5 goals in the bookmaker odds
+    try:
+        bookmakers = odds_data['response'][0].get('bookmakers', [])
+        for bookmaker in bookmakers:
+            if 'bets' in bookmaker:
+                for bet in bookmaker['bets']:
+                    if bet['id'] == 5:  # Over/Under 1.5 goals
+                        for outcome in bet['values']:
+                            if outcome['value'] == 'Over 1.5':
+                                over_15 = float(outcome['odd'])
+                            elif outcome['value'] == 'Under 1.5':
+                                under_15 = float(outcome['odd'])
+                        
+                        return {
+                            'over_15': round(over_15, 2) if 'over_15' in locals() else None,
+                            'under_15': round(under_15, 2) if 'under_15' in locals() else None
+                        }
+    except Exception as e:
+        logger.error(f"Error parsing odds: {e}")
+    
+    return {'over_15': None, 'under_15': None}
+
+def get_sample_matches(start_date, end_date):
+    """Generate sample matches as fallback when API is not available"""
     matches = []
     current_date = start_date
     
@@ -26,11 +145,11 @@ def fetch_matches(start_date, end_date):
              "PSG", "Lyon", "Marseille", "Monaco", "Lille"]
     
     while current_date <= end_date:
-        # Generate 5-10 matches per day
-        num_matches = random.randint(5, 10)
+        # Generate 2-5 matches per day
+        num_matches = 2 + (current_date.day % 4)  # Vary number of matches
         for _ in range(num_matches):
             home = random.choice(teams)
-            away = random.choice([t for t in teams if t != home])  # Ensure different teams
+            away = random.choice([t for t in teams if t != home])
             
             # Generate random odds and prediction confidence
             over_15_odds = round(random.uniform(1.1, 2.5), 2)
@@ -50,42 +169,4 @@ def fetch_matches(start_date, end_date):
     
     return matches
 
-def scrape_bet9ja_matches():
-    """
-    Scrape match data from bet9ja.com
-    Note: This is a placeholder. In a real implementation, you would need to:
-    1. Check bet9ja's terms of service
-    2. Use proper headers to avoid being blocked
-    3. Handle rate limiting
-    4. Parse the HTML structure of their website
-    """
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-    }
-    
-    try:
-        # This URL is an example and may not be correct
-        url = "https://www.bet9ja.com/market/over-1.5-goals"
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        
-        # Parse the HTML response
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Extract match data (this is a simplified example)
-        matches = []
-        # Add parsing logic here based on bet9ja's HTML structure
-        
-        return matches
-        
-    except Exception as e:
-        print(f"Error scraping bet9ja: {e}")
-        return []
-
-def scrape_sportybet_matches():
-    """
-    Scrape match data from sportybet.com
-    Note: This is a placeholder. Similar considerations as scrape_bet9ja_matches apply.
-    """
-    # Implementation would be similar to scrape_bet9ja_matches
-    return []
+# Removed scraping functions as we're using API-Football now
