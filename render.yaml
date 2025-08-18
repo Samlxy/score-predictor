@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: score-predictor
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:10000
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.16
+      - key: FLASK_APP
+        value: app.py
+      - key: FLASK_ENV
+        value: production

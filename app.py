@@ -1,11 +1,31 @@
-from flask import Flask, render_template, request, jsonify, flash
+from flask import Flask, render_template, request, jsonify, flash, redirect, url_for
 from datetime import datetime, timedelta
 import os
 import logging
+import sys
 from dotenv import load_dotenv
 from models import db, Match
 from data_fetcher import fetch_matches
-from predictor import predict_over_15_goals
+from predictor import predict_over_15_goals, load_model
+
+# Initialize model and scaler when the app starts
+model_loaded = False
+model_load_error = None
+
+def initialize_models():
+    """Initialize the ML model and scaler when the app starts."""
+    global model_loaded, model_load_error
+    try:
+        model, scaler = load_model()
+        if model is None or scaler is None:
+            model_load_error = "Failed to load model or scaler. Using fallback prediction method."
+            logger.error(model_load_error)
+        else:
+            model_loaded = True
+            logger.info("Successfully loaded ML model and scaler")
+    except Exception as e:
+        model_load_error = f"Error initializing model: {str(e)}"
+        logger.error(model_load_error, exc_info=True)
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +45,9 @@ def create_app():
     with app.app_context():
         db.create_all()
     
+    # Initialize ML models
+    initialize_models()
+    
     return app
 
 app = create_app()
@@ -36,6 +59,10 @@ def index():
     end_date = start_date + timedelta(days=7)
     competition_code = 'PL'  # Default to Premier League
     matches = []
+    
+    # Show model loading status to the user
+    if not model_loaded and model_load_error:
+        flash(f'Warning: {model_load_error}', 'warning')
     
     if request.method == 'POST':
         try:
@@ -93,27 +120,60 @@ def health_check():
     return jsonify({"status": "healthy", "timestamp": datetime.utcnow().isoformat()})
 
 def get_confidence_level(prediction):
-    """Helper function to determine confidence level based on prediction value."""
-    if prediction >= 0.7:  # High confidence
-        return 0
-    elif prediction >= 0.4:  # Medium confidence
-        return 1
-    return 2  # Low confidence
+    """
+    Helper function to determine confidence level based on prediction value.
+    
+    Args:
+        prediction (float): The prediction probability (0-1)
+        
+    Returns:
+        str: 'high', 'medium', or 'low' confidence
+    """
+    if not isinstance(prediction, (int, float)):
+        return 'low'
+        
+    if prediction > 0.8 or prediction < 0.2:
+        return 'high'  # High confidence
+    elif prediction > 0.7 or prediction < 0.3:
+        return 'medium'  # Medium confidence
+    return 'low'  # Low confidence
 
 def process_matches(matches):
-    """Process matches to add predictions and confidence scores."""
-    processed_matches = []
+    """Process matches to add predictions and confidence scores.
+    
+    Args:
+        matches (list): List of match dictionaries containing odds data.
+        
+    Returns:
+        list: List of match dictionaries with added prediction and confidence data.
+    """
     for match in matches:
+        # Get the prediction for the match
         try:
-            # Get prediction for over 1.5 goals
-            prediction = predict_over_15_goals(match)
+            over_odds = match.get('over_15_odds', 1.8)  # Default fallback odds
+            under_odds = match.get('under_15_odds', 2.0)  # Default fallback odds
+            
+            # Get prediction and whether fallback was used
+            prediction, used_fallback = predict_over_15_goals(over_odds, under_odds)
+            
+            # Store prediction and confidence
             match['prediction'] = prediction
-            match['prediction_confidence'] = round(prediction * 100, 1)  # Convert to percentage
-            processed_matches.append(match)
+            match['confidence'] = get_confidence_level(prediction)
+            
+            # Log if fallback was used
+            if used_fallback:
+                logger.warning(
+                    f"Used fallback prediction for match {match.get('id', 'unknown')}. "
+                    f"Odds: over={over_odds}, under={under_odds}, prediction={prediction}"
+                )
+                
         except Exception as e:
-            logger.error(f"Error processing match {match.get('home_team', 'Unknown')} vs {match.get('away_team', 'Unknown')}: {e}")
-            continue
-    return processed_matches
+            logger.error(f"Error predicting for match {match.get('id', 'unknown')}: {e}", exc_info=True)
+            # Default to 50% prediction if something goes wrong
+            match['prediction'] = 0.5
+            match['confidence'] = 'low'
+    
+    return matches
 
 if __name__ == '__main__':
     app.run(debug=True)

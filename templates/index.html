@@ -57,8 +57,8 @@
                 </thead>
                 <tbody>
                     {% for match in matches %}
-                    {% set confidence = match.prediction_confidence if 'prediction_confidence' in match else match.prediction * 100 %}
-                    <tr class="match-row {% if confidence >= 75 %}confidence-high{% elif confidence >= 50 %}confidence-medium{% else %}confidence-low{% endif %}">
+                    {% set prediction_percent = match.prediction * 100 %}
+                    <tr class="match-row {% if match.confidence == 'high' %}confidence-high{% elif match.confidence == 'medium' %}confidence-medium{% else %}confidence-low{% endif %}">
                         <td>{{ loop.index }}</td>
                         <td>
                             <strong>{{ match.home_team }}</strong> vs <strong>{{ match.away_team }}</strong>
@@ -83,10 +83,10 @@
                         </td>
                         <td>
                             <span class="confidence-badge 
-                                {% if confidence >= 75 %}bg-success
-                                {% elif confidence >= 50 %}bg-warning
+                                {% if match.confidence == 'high' %}bg-success
+                                {% elif match.confidence == 'medium' %}bg-warning
                                 {% else %}bg-danger{% endif %}">
-                                {{ "%.1f"|format(confidence) }}%
+                                {{ match.confidence | capitalize }}
                             </span>
                         </td>
                     </tr>

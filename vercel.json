@@ -1,0 +1,31 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "wsgi.py",
+      "use": "@vercel/python",
+      "config": { 
+        "maxLambdaSize": "15mb",
+        "runtime": "python3.9"
+      }
+    },
+    {
+      "src": "static/*",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/wsgi.py"
+    }
+  ],
+  "build": {
+    "env": {
+      "PYTHON_VERSION": "3.9",
+      "PIP_ONLY_BINARY": ":all:",
+      "PIP_EXTRA_INDEX_URL": "https://pypi.org/simple"
+    }
+  },
+  "installCommand": "pip install --upgrade pip && pip install -r requirements.txt"
+}
