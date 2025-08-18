@@ -4,12 +4,16 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 import joblib
 import os
+import logging
+from model_loader import get_model, get_scaler
 
-# Placeholder for the model
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Placeholder for the model and scaler
 model = None
 scaler = None
-MODEL_PATH = 'over_15_goals_model.pkl'
-SCALER_PATH = 'scaler.pkl'
 
 def train_model(X, y):
     """
@@ -33,50 +37,39 @@ def train_model(X, y):
     return model, scaler
 
 def load_model():
-    """Load a pre-trained model and scaler if they exist"""
+    """Load a pre-trained model and scaler"""
     global model, scaler
     
-    if os.path.exists(MODEL_PATH) and os.path.exists(SCALER_PATH):
-        model = joblib.load(MODEL_PATH)
-        scaler = joblib.load(SCALER_PATH)
+    if model is None:
+        model = get_model()
+    if scaler is None:
+        scaler = get_scaler()
     
     return model, scaler
 
-def predict_over_15_goals(match):
+def predict_over_15_goals(over_odds, under_odds):
     """
-    Predict the probability of over 1.5 goals in a match
+    Predict the probability of a match having over 1.5 goals.
     
     Args:
-        match (dict): Match data including teams, odds, etc.
+        over_odds (float): The odds for over 1.5 goals.
+        under_odds (float): The odds for under 1.5 goals.
         
     Returns:
-        float: Probability of over 1.5 goals (0-1)
+        tuple: A tuple containing:
+            - float: Probability of over 1.5 goals (0-1)
+            - bool: Whether the fallback method was used
     """
-    global model, scaler
+    # Load the model and scaler
+    model, scaler = load_model()
     
-    # Load model if not already loaded
+    # If we don't have a model or scaler, use the fallback method
     if model is None or scaler is None:
-        model, scaler = load_model()
+        logger.warning("Model or scaler not available, using fallback prediction")
+        return _fallback_prediction(over_odds, under_odds), True
     
-    # If no model exists, return a simple prediction based on odds
-    if model is None or scaler is None:
-        # Simple heuristic: higher odds for over 1.5 means lower probability
-        if 'over_15_odds' in match and match['over_15_odds']:
-            # Convert odds to implied probability
-            prob = 1 / match['over_15_odds']
-            # Add some randomness for demo purposes
-            prob = min(0.95, max(0.05, prob * (0.9 + 0.2 * np.random.random())))
-            return prob
-        return 0.5  # Default to 50% if no odds available
-    
-    # In a real implementation, we would extract features from the match data
-    # For now, we'll use a simple approach based on odds
     try:
-        # Example features: odds for over 1.5, odds for under 1.5, their ratio
-        over_odds = match.get('over_15_odds', 1.8)
-        under_odds = match.get('under_15_odds', 2.0)
-        
-        # Simple feature engineering
+        # Calculate the odds ratio
         odds_ratio = over_odds / under_odds if under_odds > 0 else 1.0
         
         # Create feature vector
@@ -88,10 +81,34 @@ def predict_over_15_goals(match):
         # Make prediction
         prob = model.predict_proba(features_scaled)[0][1]  # Probability of class 1 (over 1.5)
         
-        return float(prob)
+        return float(prob), False
     except Exception as e:
-        print(f"Error in prediction: {e}")
-        return 0.5  # Fallback to 50% probability
+        logger.error(f"Error in prediction: {e}", exc_info=True)
+        return _fallback_prediction(over_odds, under_odds), True
+
+
+def _fallback_prediction(over_odds, under_odds):
+    """
+    Fallback prediction method when the model or scaler is not available.
+    
+    Args:
+        over_odds (float): The odds for over 1.5 goals.
+        under_odds (float): The odds for under 1.5 goals.
+        
+    Returns:
+        float: Probability of over 1.5 goals (0-1)
+    """
+    try:
+        # Simple heuristic: if over_odds are lower than under_odds, it's more likely to be over 1.5
+        if over_odds < under_odds:
+            # More likely to be over 1.5, return a higher probability
+            return min(0.8, 1.0 / over_odds)  # Cap at 0.8 for safety
+        else:
+            # More likely to be under 1.5, return a lower probability
+            return max(0.2, 1.0 / under_odds)  # Cap at 0.2 for safety
+    except Exception as e:
+        logger.error(f"Error in fallback prediction: {e}", exc_info=True)
+        return 0.5  # Default to 50% if something goes wrong
 
 def generate_training_data():
     """
@@ -117,6 +134,11 @@ def generate_training_data():
     return X, outcomes
 
 # Initialize with some training data if no model exists
-if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
-    X, y = generate_training_data()
-    train_model(X, y)
+if __name__ == "__main__":
+    if not os.path.exists(MODEL_PATH) or not os.path.exists(SCALER_PATH):
+        logger.info("No pre-trained model found. Generating training data and training a new model...")
+        X, y = generate_training_data()
+        train_model(X, y)
+    else:
+        logger.info("Pre-trained model and scaler found. Loading...")
+        model, scaler = load_model()
