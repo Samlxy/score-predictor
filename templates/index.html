@@ -3,15 +3,27 @@
 {% block content %}
 <div class="form-date-range">
     <form method="POST" class="row g-3">
-        <div class="col-md-4">
+        <div class="col-md-3">
+            <label for="league_id" class="form-label">League</label>
+            <select class="form-select" id="competition_code" name="competition_code">
+                <option value="PL" {% if competition_code == 'PL' %}selected{% endif %}>Premier League</option>
+                <option value="PD" {% if competition_code == 'PD' %}selected{% endif %}>La Liga</option>
+                <option value="SA" {% if competition_code == 'SA' %}selected{% endif %}>Serie A</option>
+                <option value="BL1" {% if competition_code == 'BL1' %}selected{% endif %}>Bundesliga</option>
+                <option value="FL1" {% if competition_code == 'FL1' %}selected{% endif %}>Ligue 1</option>
+                <option value="CL" {% if competition_code == 'CL' %}selected{% endif %}>Champions League</option>
+                <option value="EL" {% if competition_code == 'EL' %}selected{% endif %}>Europa League</option>
+            </select>
+        </div>
+        <div class="col-md-3">
             <label for="start_date" class="form-label">Start Date</label>
-            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}" required>
+            <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date.strftime('%Y-%m-%d') if start_date else '' }}" required>
         </div>
-        <div class="col-md-4">
+        <div class="col-md-3">
             <label for="end_date" class="form-label">End Date</label>
-            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}" required>
+            <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date.strftime('%Y-%m-%d') if end_date else '' }}" required>
         </div>
-        <div class="col-md-4 d-flex align-items-end">
+        <div class="col-md-3 d-flex align-items-end">
             <button type="submit" class="btn btn-primary w-100">
                 <i class="bi bi-search"></i> Find Matches
             </button>
