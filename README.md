@@ -66,7 +66,19 @@ predict_over_15_goals()
    ```bash
    python app.py
    ```
-4. Open your browser and navigate to `http://127.0.0.1:5000`
+5. Open your browser and navigate to `http://127.0.0.1:5000`
+
+6.  Requirements.txt
+      Flask==2.3.3
+      requests==2.31.0
+      beautifulsoup4==4.12.2
+      pandas==2.1.0
+      python-dotenv==1.0.0
+      flask-sqlalchemy==3.0.5
+      pytz==2023.3
+      numpy==1.24.3
+      scikit-learn==1.3.0
+      python-dateutil==2.8.2
 
 ## Data Sources
 
