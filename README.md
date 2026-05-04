@@ -1,5 +1,7 @@
 # Soccer Predictor - Over 1.5 Goals
 
+<img width="1595" height="826" alt="soccer_predictor_python" src="https://github.com/user-attachments/assets/3acb0440-0f51-404d-9ffd-690c46540599" />
+
 A web application that predicts soccer matches likely to have over 1.5 goals based on historical data and betting odds.
 
 ## How the over 1.5 goals prediction works in this application:
